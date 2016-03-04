@@ -1,17 +1,12 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+# Reproducible Research: Peer Assessment 1
 
-```{r echo = FALSE}
+Course Project by Aleksei Neveror
+
+```{r echo = TRUE}
 library(ggplot2)
 library(knitr)
 opts_chunk$set(fig.path="figure/")
 ```
-
-Course Project by Aleksei Neveror
 
 ## Loading and preprocessing the data
 
@@ -81,7 +76,7 @@ These values means that the individual was wearing this activity monitor did cir
 ```{r echo = TRUE}
 g <- ggplot(totals, aes(steps))
 g <- g + geom_histogram(binwidth = 1000)
-g <- g + labs("Total number of steps taken each day")
+g <- g + labs(title = "Total number of steps taken each day")
 print(g)
 ```
 
@@ -104,9 +99,9 @@ The time series plot of the 5-minute interval and the average number of steps ta
 g <- ggplot(avgs, aes(interval, steps))
 g <- g + geom_point(col = "blue", alpha = .5, size = 1)
 g <- g + geom_path()
-g <- g + scale_x_continuous(breaks = round(seq(min(avgs$interval), max(avgs$interval), by = 100),1))
+g <- g + scale_x_continuous(breaks = round(seq(min(avgs$interval), max(avgs$interval), by = 200),1))
 g <- g + labs(title = "The average daily activity pattern")
-g <- g + xlab("Intervals")
+g <- g + xlab("5-minutes intervals")
 g <- g + ylab("Average number of steps")
 print(g)
 ```
@@ -117,12 +112,102 @@ So we can see, that the individual took the most number of steps in the interval
 as.integer(avgs[avgs$steps == max(avgs$steps),"interval"])
 ```
 
-So 
-
+So the 5-min interval in which the individual took the most number of steps is 8:35.
 
 
 ## Imputing missing values
 
+Let's look at the source dataset. There are some obesrvations in which the **step** variable has NAs:
 
+```{r echo = TRUE}
+sum(is.na(data$steps))
+mean(is.na(data$steps))
+```
+
+In fact there are 2304 NA values of the **step** variable (or 13,1%). It's not too a lot, but presenting of the NA values may introduce bias into some calculations or summaries of the data. 
+
+To get rid of NA values let's replace them with some others. As value to replace let's use the mean value of steps taken by individual in the defined 5-minutes interval, calculated without NAs:
+
+```{r echo = TRUE}
+fdata <- data
+fdata$steps <- as.numeric(fdata$steps)
+fdata <- merge(fdata, avgs, by = "interval")
+fdata <- transform(fdata, steps.x = ifelse(!is.na(steps.x),steps.x,steps.y))
+fdata <- fdata[,1:4]
+names(fdata)[2] <- "steps"
+mean(is.na(fdata$steps))
+```
+
+As a result we have a new dataset with 0% of NA values in **steps** variable. 
+
+For futher analisys we need to calculate new total values of numbers of steps per day:
+
+```{r echo = TRUE}
+ftotals <- aggregate(fdata$steps, by = list(fdata$date), FUN = sum)
+names(ftotals) <- c("date","steps")
+mean(is.na(ftotals$steps))
+```
+
+As we can see this dataset has 0% of NA values in **steps** variable too.
+
+In order to estimate changes of the dataset let's plot two histograms and compare them:
+
+```{r echo = TRUE}
+## Merge datasets with and without NAs and mark the observations
+tmp1 <- totals
+tmp1$source <- "With NAs"
+tmp2 <- ftotals
+tmp2$source <- "Without NAs"
+tmp <- rbind(tmp1, tmp2)
+tmp$source <- factor(tmp$source)
+
+### Plot a histogram
+g <- ggplot(tmp, aes(steps))
+g <- g + geom_histogram(binwidth = 1000, aes(color = source, fill = source))
+g <- g + facet_grid(~source)
+g <- g + labs(title = "Total number of steps taken each day")
+print(g)
+```
+
+After inserting NA values the frequency of steps around 10000 per day has grown up.
+
+Let's compare the mean and median values of old and new datasets:
+```{r echo = TRUE}
+# Summary for old dataset (with NAs)
+summary(totals$steps)
+# Summary for new dataset (without NAs)
+summary(ftotals$steps)
+```
+
+The mean value didn't change after inserting NA values. But we can see some changes of the quantiles. So we can notice that the median value grew up. It shows us that individual takes 10770 or less steps per day with 50% probability. Also the 1st and the 3rd quantiles were changed: the 1st one grew up, and the 3rd one decreased. In compliance with new data the individual takes more steps with 25%-probability (9819 steps according the new dataset instead of 8841 steps according the old one) and less steps with 75%-probability (12810 steps per day according the new data instead of 13290 according the old one).
+
+The analysis after imputting of empty values shows that the individual is less active than it was shown with the analisys of the dataset containing NAs, because with the higher probability the individual takes less steps per day.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Using the new dataset (without NA values) let's build activity patterns for weekdays and weekends. For this purpose let's create a new dataset containing the average values of steps numbers per 5-minutes intervals based on the new dataset.This times we shall aggregate data by two parameters: interval and daytype:
+
+```{r echo = TRUE}
+favgs <- aggregate(fdata$steps, by = list(fdata$interval, fdata$daytype), FUN = mean, na.rm = TRUE)  
+names(favgs) <- c("interval","daytype","steps")
+favgs$interval <- as.integer(favgs$interval)
+```
+
+To compare activity patterns for weekdays and weekends let's plot the time series diagram:
+
+```{r echo = TRUE}
+g <- ggplot(favgs, aes(interval, steps))
+g <- g + geom_point()
+g <- g + geom_path()
+g <- g + geom_smooth()
+g <- g + facet_wrap( ~ daytype)
+g <- g + labs(title = "Activity patterns for weekdays and weekends")
+g <- g + xlab("5-minutes intervals")
+g <- g + ylab("Average number of steps")
+print(g)
+
+```
+
+The diagram shows that on the weekdays the individual takes more activity mornings (around 9:00). Later the number of taken steps significally decreases. Peak values are observed primarily in the morning and much lower in the evening. 
+
+In comparison with activity pattern for weekdays the one for weekend is more flat. There isn't any significant picks, like in the pattern for weekdays. It shows that the individual is almost equally active throughout all the day at the weekends.
